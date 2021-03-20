@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -25,9 +26,7 @@ func createConnection() *sql.DB {
 	return db
 }
 
-func initDatabase() {
-	conn := createConnection()
-
+func initDatabase(conn *sql.DB) {
 	queryStmt := "CREATE TABLE history(id INTEGER PRIMARY KEY, command varchar(512), timestamp datetime DEFAULT current_timestamp, user varchar(25), hostname varchar(32));\n" +
 		"CREATE VIEW count_by_date AS SELECT COUNT(id), STRFTIME('%Y-%m-%d', timestamp)  FROM history GROUP BY strftime('%Y-%m-%d', timestamp)"
 
@@ -37,9 +36,25 @@ func initDatabase() {
 	}
 }
 
-func search(q string) {
-	conn := createConnection()
+func importFromStdin(conn *sql.DB) {
+	scanner := bufio.NewScanner(os.Stdin)
 
+	_, err := conn.Exec("BEGIN;")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	for scanner.Scan() {
+		add(conn, scanner.Text())
+	}
+
+	_, err = conn.Exec("END;")
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+func search(conn *sql.DB, q string) {
 	queryStmt := "SELECT command FROM history WHERE command LIKE ? ORDER BY timestamp ASC"
 
 	rows, err := conn.Query(queryStmt, "%"+q+"%")
@@ -57,9 +72,7 @@ func search(q string) {
 	}
 }
 
-func add(cmd string) {
-	conn := createConnection()
-
+func add(conn *sql.DB, cmd string) {
 	user := os.Getenv("USER")
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -113,6 +126,8 @@ func main() {
 
 	cmd := args[0]
 
+	conn := createConnection()
+
 	if cmd == "add" {
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Error: You need to provide the command to be added")
@@ -121,18 +136,20 @@ func main() {
 		historycmd := args[1]
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
-		add(rs[1])
+		add(conn, rs[1])
 	} else if cmd == "search" {
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Please provide the search query\n")
 		}
 		q := args[1]
-		search(q)
+		search(conn, q)
 	} else if cmd == "init" {
 		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
 		if err != nil {
 			log.Panic(err)
 		}
-		initDatabase()
+		initDatabase(conn)
+	} else if cmd == "import" {
+		importFromStdin(conn)
 	}
 }
