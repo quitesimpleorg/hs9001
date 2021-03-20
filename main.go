@@ -112,6 +112,12 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	argslen := len(args)
+
+	if argslen < 1 {
+		fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init>\n")
+		return
+	}
+
 	cmd := args[0]
 
 	if cmd == "add" {
