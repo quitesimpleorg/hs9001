@@ -6,26 +6,50 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
-	_ "github.com/mattn/go-sqlite3"
+
+	_ "modernc.org/sqlite"
 )
 
-func create_connection() * sql.DB {
-	homedir := os.Getenv("HOME");
+func databaseLocation() string {
+	return filepath.Join(xdgOrFallback("XDG_DATA_HOME", filepath.Join(os.Getenv("HOME"), ".local/share")), "hs9001/db.sqlite")
+}
 
-	db, err := sql.Open("sqlite3", homedir + "./local/share/hs0001/db.sqlite")
+func createConnection() *sql.DB {
+
+	db, err := sql.Open("sqlite", databaseLocation())
 	if err != nil {
 		log.Panic(err)
 	}
 	return db
 }
 
+func initDatabase() {
+
+	/*
+		CREATE TABLE history(id INTEGER PRIMARY KEY, command varchar(512), timestamp datetime DEFAULT current_timestamp, user varchar(25), hostname varchar(32));
+		CREATE VIEW count_by_date AS SELECT COUNT(id), STRFTIME('%Y-%m-%d', timestamp)  FROM history GROUP BY strftime('%Y-%m-%d', timestamp)
+		count_by_date("COUNT(id)","STRFTIME('%Y-%m-%d', timestamp)") ;
+	*/
+
+	conn := createConnection()
+
+	queryStmt := "CREATE TABLE history(id INTEGER PRIMARY KEY, command varchar(512), timestamp datetime DEFAULT current_timestamp, user varchar(25), hostname varchar(32));\n" +
+		"CREATE VIEW count_by_date AS SELECT COUNT(id), STRFTIME('%Y-%m-%d', timestamp)  FROM history GROUP BY strftime('%Y-%m-%d', timestamp)"
+
+	_, err := conn.Exec(queryStmt)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
 func search(q string) {
-	conn := create_connection()
+	conn := createConnection()
 
 	queryStmt := "SELECT command FROM history WHERE command LIKE ? ORDER BY timestamp ASC"
 
-	rows, err := conn.Query(queryStmt,"%"+q+"%");
+	rows, err := conn.Query(queryStmt, "%"+q+"%")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -36,12 +60,12 @@ func search(q string) {
 		if err != nil {
 			log.Panic(err)
 		}
-		log.Printf("%s", command)
+		fmt.Printf("%s\n", command)
 	}
 }
 
 func add(cmd string) {
-	conn := create_connection()
+	conn := createConnection()
 
 	user := os.Getenv("USER")
 	hostname, err := os.Hostname()
@@ -61,6 +85,28 @@ func add(cmd string) {
 
 }
 
+func xdgOrFallback(xdg string, fallback string) string {
+	dir := os.Getenv(xdg)
+	if dir != "" {
+		if ok, err := exists(dir); ok && err == nil {
+			return dir
+		}
+
+	}
+
+	return fallback
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
 
 func main() {
 	flag.Parse()
@@ -83,5 +129,11 @@ func main() {
 		}
 		q := args[1]
 		search(q)
+	} else if cmd == "init" {
+		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
+		if err != nil {
+			log.Panic(err)
+		}
+		initDatabase()
 	}
 }
