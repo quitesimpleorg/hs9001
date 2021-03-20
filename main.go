@@ -26,13 +26,6 @@ func createConnection() *sql.DB {
 }
 
 func initDatabase() {
-
-	/*
-		CREATE TABLE history(id INTEGER PRIMARY KEY, command varchar(512), timestamp datetime DEFAULT current_timestamp, user varchar(25), hostname varchar(32));
-		CREATE VIEW count_by_date AS SELECT COUNT(id), STRFTIME('%Y-%m-%d', timestamp)  FROM history GROUP BY strftime('%Y-%m-%d', timestamp)
-		count_by_date("COUNT(id)","STRFTIME('%Y-%m-%d', timestamp)") ;
-	*/
-
 	conn := createConnection()
 
 	queryStmt := "CREATE TABLE history(id INTEGER PRIMARY KEY, command varchar(512), timestamp datetime DEFAULT current_timestamp, user varchar(25), hostname varchar(32));\n" +
