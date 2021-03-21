@@ -120,7 +120,7 @@ func main() {
 	argslen := len(args)
 
 	if argslen < 1 {
-		fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init>\n")
+		fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init/import>\n")
 		return
 	}
 
