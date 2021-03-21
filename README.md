@@ -15,7 +15,7 @@ Add this to .bashrc
 
 ```
 if [ -n "$PS1" ] ; then
-    PROMPT_COMMAND='hs9001 add "$(history 1)"'
+    PROMPT_COMMAND='hs9001 -ret $? add "$(history 1)"'
 fi
 ```
 By default, every system user gets his own database. You can override this by overriding the environment variable

@@ -119,6 +119,8 @@ func exists(path string) (bool, error) {
 }
 
 func main() {
+	var ret int
+	flag.IntVar(&ret, "ret", 0, "Return value of the command to add")
 	flag.Parse()
 	args := flag.Args()
 	argslen := len(args)
@@ -133,6 +135,9 @@ func main() {
 	conn := createConnection()
 
 	if cmd == "add" {
+		if ret == 23 { // 23 is our secret do not log status code
+			return
+		}
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Error: You need to provide the command to be added")
 
@@ -149,6 +154,7 @@ func main() {
 		}
 		q := args[1]
 		search(conn, q)
+		os.Exit(23)
 	} else if cmd == "init" {
 		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
 		if err != nil {
