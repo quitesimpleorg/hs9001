@@ -140,7 +140,9 @@ func main() {
 		historycmd := args[1]
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
-		add(conn, rs[1])
+		if len(rs) == 2 {
+			add(conn, rs[1])
+		}
 	} else if cmd == "search" {
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Please provide the search query\n")
