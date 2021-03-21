@@ -14,6 +14,10 @@ import (
 )
 
 func databaseLocation() string {
+	envOverride := os.Getenv("HS9001_DB_PATH")
+	if envOverride != "" {
+		return envOverride
+	}
 	return filepath.Join(xdgOrFallback("XDG_DATA_HOME", filepath.Join(os.Getenv("HOME"), ".local/share")), "hs9001/db.sqlite")
 }
 
