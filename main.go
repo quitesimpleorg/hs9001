@@ -119,6 +119,10 @@ func exists(path string) (bool, error) {
 	return false, err
 }
 
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init/import>\n")
+}
+
 func main() {
 	var ret int
 	flag.IntVar(&ret, "ret", 0, "Return value of the command to add")
@@ -127,7 +131,7 @@ func main() {
 	argslen := len(args)
 
 	if argslen < 1 {
-		fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init/import>\n")
+		printUsage()
 		return
 	}
 
@@ -164,5 +168,9 @@ func main() {
 		initDatabase(conn)
 	} else if cmd == "import" {
 		importFromStdin(conn)
+	} else {
+		fmt.Fprint(os.Stderr, "Error: Unknown command supplied\n\n")
+		printUsage()
+		return
 	}
 }
