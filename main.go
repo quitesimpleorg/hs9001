@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -152,7 +153,7 @@ func main() {
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Please provide the search query\n")
 		}
-		q := args[1]
+		q := strings.Join(args[1:], " ")
 		search(conn, q)
 		os.Exit(23)
 	} else if cmd == "init" {
