@@ -11,16 +11,19 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/tj/go-naturaldate"
 	_ "modernc.org/sqlite"
 )
 
 type HistoryEntry struct {
-	id       uint32
-	cmd      string
-	cwd      string
-	hostname string
-	user     string
+	id        uint32
+	cmd       string
+	cwd       string
+	hostname  string
+	user      string
+	timestamp time.Time
 }
 
 func databaseLocation() string {
@@ -110,10 +113,11 @@ func NewHistoryEntry(cmd string) HistoryEntry {
 		log.Panic(err)
 	}
 	return HistoryEntry{
-		user:     os.Getenv("USER"),
-		hostname: hostname,
-		cmd:      cmd,
-		cwd:      wd,
+		user:      os.Getenv("USER"),
+		hostname:  hostname,
+		cmd:       cmd,
+		cwd:       wd,
+		timestamp: time.Now(),
 	}
 }
 
@@ -128,6 +132,7 @@ func importFromStdin(conn *sql.DB) {
 	for scanner.Scan() {
 		entry := NewHistoryEntry(scanner.Text())
 		entry.cwd = ""
+		entry.timestamp = time.Unix(0, 0)
 		add(conn, entry)
 	}
 
@@ -168,12 +173,12 @@ func delete(conn *sql.DB, entryId uint32) {
 }
 
 func add(conn *sql.DB, entry HistoryEntry) {
-	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir) VALUES (?, ?, ?, ?)")
+	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir, timestamp) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'))")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = stmt.Exec(entry.user, entry.cmd, entry.hostname, entry.cwd)
+	_, err = stmt.Exec(entry.user, entry.cmd, entry.hostname, entry.cwd, entry.timestamp.Unix())
 	if err != nil {
 		log.Panic(err)
 	}
