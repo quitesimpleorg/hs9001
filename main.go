@@ -44,7 +44,9 @@ func initDatabase(conn *sql.DB) {
 
 func migrateDatabase(conn *sql.DB, currentVersion int) {
 
-	migrations := []string{"ALTER TABLE history add column workdir varchar(4096)"}
+	migrations := []string{
+		"ALTER TABLE history add column workdir varchar(4096)",
+	}
 
 	if !(len(migrations) > currentVersion) {
 		return
@@ -98,7 +100,7 @@ func importFromStdin(conn *sql.DB) {
 	}
 
 	for scanner.Scan() {
-		add(conn, scanner.Text())
+		add(conn, scanner.Text(), "")
 	}
 
 	_, err = conn.Exec("END;")
@@ -141,19 +143,19 @@ func delete(conn *sql.DB, q string) {
 
 }
 
-func add(conn *sql.DB, cmd string) {
+func add(conn *sql.DB, cmd string, cwd string) {
 	user := os.Getenv("USER")
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Panic(err)
 	}
 
-	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname) VALUES (?, ?, ?)")
+	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = stmt.Exec(user, cmd, hostname)
+	_, err = stmt.Exec(user, cmd, hostname, cwd)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -234,7 +236,11 @@ func main() {
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
 		if len(rs) == 2 {
-			add(conn, rs[1])
+			wd, err := os.Getwd()
+			if err != nil {
+				log.Panic(err)
+			}
+			add(conn, rs[1], wd)
 		}
 	case "search":
 		searchCmd.Parse(globalargs)
