@@ -124,54 +124,63 @@ func printUsage() {
 }
 
 func main() {
-	var ret int
-	flag.IntVar(&ret, "ret", 0, "Return value of the command to add")
-	flag.Parse()
-	args := flag.Args()
-	argslen := len(args)
+	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
+	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
 
-	if argslen < 1 {
+	if len(os.Args) < 1 {
 		printUsage()
 		return
 	}
 
-	cmd := args[0]
+	cmd := os.Args[1]
+	globalargs := os.Args[2:]
 
 	conn := createConnection()
 
-	if cmd == "add" {
+	switch cmd {
+	case "add":
+		var ret int
+		addCmd.IntVar(&ret, "ret", 0, "Return value of the command to add")
+		addCmd.Parse(globalargs)
+		args := addCmd.Args()
+
 		if ret == 23 { // 23 is our secret do not log status code
 			return
 		}
-		if argslen < 2 {
+		if len(args) < 1 {
 			fmt.Fprint(os.Stderr, "Error: You need to provide the command to be added")
 
 		}
-		historycmd := args[1]
+		historycmd := args[0]
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
 		if len(rs) == 2 {
 			add(conn, rs[1])
 		}
-	} else if cmd == "search" {
-		if argslen < 2 {
+	case "search":
+		searchCmd.Parse(globalargs)
+		args := searchCmd.Args()
+
+		if len(args) < 1 {
 			fmt.Fprint(os.Stderr, "Please provide the search query\n")
 			os.Exit(1)
 		}
-		q := strings.Join(args[1:], " ")
+
+		q := strings.Join(args, " ")
 		search(conn, q)
 		os.Exit(23)
-	} else if cmd == "init" {
+	case "init":
 		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
 		if err != nil {
 			log.Panic(err)
 		}
 		initDatabase(conn)
-	} else if cmd == "import" {
+	case "import":
 		importFromStdin(conn)
-	} else {
-		fmt.Fprint(os.Stderr, "Error: Unknown command supplied\n\n")
+	default:
+		fmt.Fprintf(os.Stderr, "Error: Unknown subcommand '%s' supplied\n\n", cmd)
 		printUsage()
 		return
 	}
+
 }
