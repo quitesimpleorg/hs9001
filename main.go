@@ -142,10 +142,10 @@ func importFromStdin(conn *sql.DB) {
 	}
 }
 
-func search(conn *sql.DB, q string, workdir string) list.List {
-	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE command LIKE ? AND workdir LIKE ? ORDER BY timestamp ASC"
+func search(conn *sql.DB, q string, workdir string, beginTime time.Time, endTime time.Time) list.List {
+	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE timestamp BETWEEN datetime(?, 'unixepoch') AND datetime(?, 'unixepoch') AND command LIKE ? AND workdir LIKE ? ORDER BY timestamp ASC"
 
-	rows, err := conn.Query(queryStmt, q, workdir)
+	rows, err := conn.Query(queryStmt, beginTime.Unix(), endTime.Unix(), q, workdir)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -264,13 +264,29 @@ func main() {
 		fallthrough
 	case "delete":
 		var workDir string
+		var beginTime string
+		var endTime string
+
 		searchCmd.StringVar(&workDir, "workdir", "%", "Search only within this workdir")
+		searchCmd.StringVar(&beginTime, "begin", "50 years ago", "Start searching from this timeframe")
+		searchCmd.StringVar(&endTime, "end", "now", "End searching from this timeframe")
+
 		searchCmd.Parse(globalargs)
 
 		args := searchCmd.Args()
 
+		beginTimestamp, err := naturaldate.Parse(beginTime, time.Now())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+		}
+
+		endTimeStamp, err := naturaldate.Parse(endTime, time.Now())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+		}
+
 		q := strings.Join(args, " ")
-		results := search(conn, "%"+q+"%", workDir)
+		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp)
 
 		for e := results.Front(); e != nil; e = e.Next() {
 			entry, ok := e.Value.(*HistoryEntry)
