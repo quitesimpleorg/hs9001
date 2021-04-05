@@ -156,6 +156,7 @@ func main() {
 	} else if cmd == "search" {
 		if argslen < 2 {
 			fmt.Fprint(os.Stderr, "Please provide the search query\n")
+			os.Exit(1)
 		}
 		q := strings.Join(args[1:], " ")
 		search(conn, q)
