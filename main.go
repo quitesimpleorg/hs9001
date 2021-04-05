@@ -57,7 +57,7 @@ func initDatabase(conn *sql.DB) {
 func migrateDatabase(conn *sql.DB, currentVersion int) {
 
 	migrations := []string{
-		"ALTER TABLE history add column workdir varchar(4096)",
+		"ALTER TABLE history add column workdir varchar(4096) DEFAULT ''",
 	}
 
 	if !(len(migrations) > currentVersion) {
