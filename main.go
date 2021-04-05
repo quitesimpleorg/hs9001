@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"container/list"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -13,6 +14,14 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+type HistoryEntry struct {
+	id uint32
+	cmd string
+	cwd string
+	hostname string
+	user string
+}
 
 func databaseLocation() string {
 	envOverride := os.Getenv("HS9001_DB_PATH")
@@ -109,38 +118,34 @@ func importFromStdin(conn *sql.DB) {
 	}
 }
 
-func search(conn *sql.DB, q string) {
-	queryStmt := "SELECT command FROM history WHERE command LIKE ? ORDER BY timestamp ASC"
+func search(conn *sql.DB, q string) list.List  {
+	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE command LIKE ? ORDER BY timestamp ASC"
 
 	rows, err := conn.Query(queryStmt, "%"+q+"%")
 	if err != nil {
 		log.Panic(err)
 	}
 
+	var result list.List
 	defer rows.Close()
 	for rows.Next() {
-		var command string
-		err = rows.Scan(&command)
+		var entry HistoryEntry
+		err = rows.Scan(&entry.id, &entry.cmd, &entry.cwd, &entry.user, &entry.hostname)
 		if err != nil {
 			log.Panic(err)
 		}
-		fmt.Printf("%s\n", command)
+		result.PushBack(&entry)
 	}
+	return result
 }
 
-func delete(conn *sql.DB, q string) {
-	queryStmt := "DELETE FROM history WHERE command LIKE ?"
+func delete(conn *sql.DB, entryId uint32) {
+	queryStmt := "DELETE FROM history WHERE id = ?"
 
-	_, err := conn.Exec(queryStmt, "%"+q+"%")
+	_, err := conn.Exec(queryStmt, entryId)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	_, err = conn.Exec("VACUUM")
-	if err != nil {
-		log.Panic(err)
-	}
-
 }
 
 func add(conn *sql.DB, cmd string, cwd string) {
@@ -192,7 +197,6 @@ func printUsage() {
 func main() {
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
-	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
 
 	if len(os.Args) < 2 {
 		printUsage()
@@ -242,31 +246,55 @@ func main() {
 			}
 			add(conn, rs[1], wd)
 		}
-	case "search":
+	case "search": fallthrough;
+	case "delete":
 		searchCmd.Parse(globalargs)
 		args := searchCmd.Args()
 
 		if len(args) < 1 {
-			fmt.Fprint(os.Stderr, "Please provide the search query\n")
+			fmt.Fprint(os.Stderr, "Please provide the query\n")
 			os.Exit(1)
 		}
 
 		q := strings.Join(args, " ")
-		search(conn, q)
-		os.Exit(23)
-	case "delete":
-		deleteCmd.Parse(globalargs)
-		args := deleteCmd.Args()
-		if len(args) < 1 {
-			fmt.Fprint(os.Stderr, "Error: You need to provide a search query for records to delete")
+		results := search(conn, q)
+
+		for e := results.Front(); e != nil; e = e.Next() {
+			entry, ok := e.Value.(*HistoryEntry)
+			if !ok {
+				log.Panic("Failed to retrieve entries")
+			}
+
+			fmt.Printf("%s\n", entry.cmd)
+		}
+
+		if cmd == "delete" {
+
+			_, err := conn.Exec("BEGIN;")
+			if err != nil {
+				log.Panic(err)
+			}
+
+			for e := results.Front(); e != nil; e = e.Next() {
+				entry, ok := e.Value.(*HistoryEntry)
+				if !ok {
+					log.Panic("Failed to retrieve entries")
+				}
+				delete(conn, entry.id)
+			}
+
+			_, err = conn.Exec("END;")
+			if err != nil {
+				log.Panic(err)
+			}
+
+			_, err = conn.Exec("VACUUM")
+			if err != nil {
+				log.Panic(err)
+			}
 
 		}
-		q := strings.Join(args, " ")
-		delete(conn, q)
-
-		//we do not want to leak what we just deleted :^)
 		os.Exit(23)
-
 	case "import":
 		importFromStdin(conn)
 	default:
