@@ -143,7 +143,7 @@ func main() {
 	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
 	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
 
-	if len(os.Args) < 1 {
+	if len(os.Args) < 2 {
 		printUsage()
 		return
 	}
