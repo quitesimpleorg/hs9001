@@ -77,6 +77,21 @@ func search(conn *sql.DB, q string) {
 	}
 }
 
+func delete(conn *sql.DB, q string) {
+	queryStmt := "DELETE FROM history WHERE command LIKE ?"
+
+	_, err := conn.Exec(queryStmt, "%"+q+"%")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = conn.Exec("VACUUM")
+	if err != nil {
+		log.Panic(err)
+	}
+
+}
+
 func add(conn *sql.DB, cmd string) {
 	user := os.Getenv("USER")
 	hostname, err := os.Hostname()
@@ -126,6 +141,7 @@ func printUsage() {
 func main() {
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
+	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
 
 	if len(os.Args) < 1 {
 		printUsage()
@@ -168,6 +184,18 @@ func main() {
 
 		q := strings.Join(args, " ")
 		search(conn, q)
+		os.Exit(23)
+	case "delete":
+		deleteCmd.Parse(globalargs)
+		args := deleteCmd.Args()
+		if len(args) < 1 {
+			fmt.Fprint(os.Stderr, "Error: You need to provide a search query for records to delete")
+
+		}
+		q := strings.Join(args, " ")
+		delete(conn, q)
+
+		//we do not want to leak what we just deleted :^)
 		os.Exit(23)
 	case "init":
 		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
