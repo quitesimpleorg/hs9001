@@ -16,11 +16,11 @@ import (
 )
 
 type HistoryEntry struct {
-	id uint32
-	cmd string
-	cwd string
+	id       uint32
+	cmd      string
+	cwd      string
 	hostname string
-	user string
+	user     string
 }
 
 func databaseLocation() string {
@@ -110,10 +110,10 @@ func NewHistoryEntry(cmd string) HistoryEntry {
 		log.Panic(err)
 	}
 	return HistoryEntry{
-		user : os.Getenv("USER"),
-		hostname : hostname,
-		cmd : cmd,
-		cwd : wd,
+		user:     os.Getenv("USER"),
+		hostname: hostname,
+		cmd:      cmd,
+		cwd:      wd,
 	}
 }
 
@@ -137,10 +137,10 @@ func importFromStdin(conn *sql.DB) {
 	}
 }
 
-func search(conn *sql.DB, q string) list.List  {
-	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE command LIKE ? ORDER BY timestamp ASC"
+func search(conn *sql.DB, q string, workdir string) list.List {
+	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE command LIKE ? AND workdir LIKE ? ORDER BY timestamp ASC"
 
-	rows, err := conn.Query(queryStmt, "%"+q+"%")
+	rows, err := conn.Query(queryStmt, q, workdir)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -167,7 +167,7 @@ func delete(conn *sql.DB, entryId uint32) {
 	}
 }
 
-func add(conn *sql.DB, entry HistoryEntry ) {
+func add(conn *sql.DB, entry HistoryEntry) {
 	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Panic(err)
@@ -255,18 +255,17 @@ func main() {
 		if len(rs) == 2 {
 			add(conn, NewHistoryEntry(rs[1]))
 		}
-	case "search": fallthrough;
+	case "search":
+		fallthrough
 	case "delete":
+		var workDir string
+		searchCmd.StringVar(&workDir, "workdir", "%", "Search only within this workdir")
 		searchCmd.Parse(globalargs)
+
 		args := searchCmd.Args()
 
-		if len(args) < 1 {
-			fmt.Fprint(os.Stderr, "Please provide the query\n")
-			os.Exit(1)
-		}
-
 		q := strings.Join(args, " ")
-		results := search(conn, q)
+		results := search(conn, "%"+q+"%", workDir)
 
 		for e := results.Front(); e != nil; e = e.Next() {
 			entry, ok := e.Value.(*HistoryEntry)
