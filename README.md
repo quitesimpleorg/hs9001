@@ -31,10 +31,6 @@ apk add hs9001
 
 ### Setup / Config
 
-```
-hs9001 init
-```
-
 Add this to .bashrc
 
 ```

@@ -28,6 +28,7 @@ func createConnection() *sql.DB {
 	if err != nil {
 		log.Panic(err)
 	}
+
 	return db
 }
 
@@ -36,6 +37,53 @@ func initDatabase(conn *sql.DB) {
 		"CREATE VIEW count_by_date AS SELECT COUNT(id), STRFTIME('%Y-%m-%d', timestamp)  FROM history GROUP BY strftime('%Y-%m-%d', timestamp)"
 
 	_, err := conn.Exec(queryStmt)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+func migrateDatabase(conn *sql.DB, currentVersion int) {
+
+	migrations := []string{"ALTER TABLE history add column workdir varchar(4096)"}
+
+	if !(len(migrations) > currentVersion) {
+		return
+	}
+
+	_, err := conn.Exec("BEGIN;")
+	if err != nil {
+		log.Panic(err)
+	}
+	for _, m := range migrations[currentVersion:] {
+		_, err := conn.Exec(m)
+		if err != nil {
+			log.Panic(err)
+		}
+
+	}
+
+	setDBVersion(conn, len(migrations))
+
+	_, err = conn.Exec("END;")
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+func fetchDBVersion(conn *sql.DB) int {
+	rows, err := conn.Query("PRAGMA user_version;")
+	if err != nil {
+		log.Panic(err)
+	}
+	defer rows.Close()
+	rows.Next()
+	var res int
+	rows.Scan(&res)
+	return res
+}
+
+func setDBVersion(conn *sql.DB, ver int) {
+	_, err := conn.Exec(fmt.Sprintf("PRAGMA user_version=%d", ver))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -67,6 +115,7 @@ func search(conn *sql.DB, q string) {
 		log.Panic(err)
 	}
 
+	defer rows.Close()
 	for rows.Next() {
 		var command string
 		err = rows.Scan(&command)
@@ -135,7 +184,7 @@ func exists(path string) (bool, error) {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/init/import>\n")
+	fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/import>\n")
 }
 
 func main() {
@@ -151,7 +200,21 @@ func main() {
 	cmd := os.Args[1]
 	globalargs := os.Args[2:]
 
-	conn := createConnection()
+	var conn *sql.DB
+	ok, _ := exists(databaseLocation())
+
+	if !ok {
+		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
+		if err != nil {
+			log.Panic(err)
+		}
+		conn = createConnection()
+		initDatabase(conn)
+	} else {
+		conn = createConnection()
+	}
+
+	migrateDatabase(conn, fetchDBVersion(conn))
 
 	switch cmd {
 	case "add":
@@ -197,12 +260,7 @@ func main() {
 
 		//we do not want to leak what we just deleted :^)
 		os.Exit(23)
-	case "init":
-		err := os.MkdirAll(filepath.Dir(databaseLocation()), 0755)
-		if err != nil {
-			log.Panic(err)
-		}
-		initDatabase(conn)
+
 	case "import":
 		importFromStdin(conn)
 	default:
