@@ -100,6 +100,23 @@ func setDBVersion(conn *sql.DB, ver int) {
 	}
 }
 
+func NewHistoryEntry(cmd string) HistoryEntry {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Panic(err)
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Panic(err)
+	}
+	return HistoryEntry{
+		user : os.Getenv("USER"),
+		hostname : hostname,
+		cmd : cmd,
+		cwd : wd,
+	}
+}
+
 func importFromStdin(conn *sql.DB) {
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -109,7 +126,9 @@ func importFromStdin(conn *sql.DB) {
 	}
 
 	for scanner.Scan() {
-		add(conn, scanner.Text(), "")
+		entry := NewHistoryEntry(scanner.Text())
+		entry.cwd = ""
+		add(conn, entry)
 	}
 
 	_, err = conn.Exec("END;")
@@ -148,19 +167,13 @@ func delete(conn *sql.DB, entryId uint32) {
 	}
 }
 
-func add(conn *sql.DB, cmd string, cwd string) {
-	user := os.Getenv("USER")
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Panic(err)
-	}
-
+func add(conn *sql.DB, entry HistoryEntry ) {
 	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = stmt.Exec(user, cmd, hostname, cwd)
+	_, err = stmt.Exec(entry.user, entry.cmd, entry.hostname, entry.cwd)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -240,11 +253,7 @@ func main() {
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
 		if len(rs) == 2 {
-			wd, err := os.Getwd()
-			if err != nil {
-				log.Panic(err)
-			}
-			add(conn, rs[1], wd)
+			add(conn, NewHistoryEntry(rs[1]))
 		}
 	case "search": fallthrough;
 	case "delete":
