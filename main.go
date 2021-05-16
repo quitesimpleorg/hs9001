@@ -23,6 +23,7 @@ type HistoryEntry struct {
 	cwd       string
 	hostname  string
 	user      string
+	retval    int
 	timestamp time.Time
 }
 
@@ -57,7 +58,8 @@ func initDatabase(conn *sql.DB) {
 func migrateDatabase(conn *sql.DB, currentVersion int) {
 
 	migrations := []string{
-		"ALTER TABLE history add column workdir varchar(4096) DEFAULT ''",
+		"ALTER TABLE history ADD COLUMN workdir varchar(4096) DEFAULT ''",
+		"ALTER TABLE history ADD COLUMN retval integer DEFAULT -9001",
 	}
 
 	if !(len(migrations) > currentVersion) {
@@ -103,7 +105,7 @@ func setDBVersion(conn *sql.DB, ver int) {
 	}
 }
 
-func NewHistoryEntry(cmd string) HistoryEntry {
+func NewHistoryEntry(cmd string, retval int) HistoryEntry {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Panic(err)
@@ -118,6 +120,7 @@ func NewHistoryEntry(cmd string) HistoryEntry {
 		cmd:       cmd,
 		cwd:       wd,
 		timestamp: time.Now(),
+		retval:    retval,
 	}
 }
 
@@ -130,7 +133,7 @@ func importFromStdin(conn *sql.DB) {
 	}
 
 	for scanner.Scan() {
-		entry := NewHistoryEntry(scanner.Text())
+		entry := NewHistoryEntry(scanner.Text(), -9001)
 		entry.cwd = ""
 		entry.timestamp = time.Unix(0, 0)
 		add(conn, entry)
@@ -142,10 +145,29 @@ func importFromStdin(conn *sql.DB) {
 	}
 }
 
-func search(conn *sql.DB, q string, workdir string, beginTime time.Time, endTime time.Time) list.List {
-	queryStmt := "SELECT id, command, workdir, user, hostname FROM history WHERE timestamp BETWEEN datetime(?, 'unixepoch') AND datetime(?, 'unixepoch') AND command LIKE ? AND workdir LIKE ? ORDER BY timestamp ASC"
+func search(conn *sql.DB, q string, workdir string, beginTime time.Time, endTime time.Time, retval int) list.List {
+	var sb strings.Builder
+	sb.WriteString("SELECT id, command, workdir, user, hostname, retval ")
+	sb.WriteString("FROM history ")
+	sb.WriteString("WHERE timestamp BETWEEN datetime(?, 'unixepoch') ")
+	sb.WriteString("AND datetime(?, 'unixepoch') ")
+	sb.WriteString("AND command LIKE ? ")
+	sb.WriteString("AND workdir LIKE ? ")
+	if retval != -9001 {
+		sb.WriteString("AND retval = ? ")
+	}
+	sb.WriteString("ORDER BY timestamp ASC ")
 
-	rows, err := conn.Query(queryStmt, beginTime.Unix(), endTime.Unix(), q, workdir)
+	queryStmt := sb.String()
+	args := make([]interface{}, 0)
+	args = append(args, beginTime.Unix())
+	args = append(args, endTime.Unix())
+	args = append(args, q)
+	args = append(args, workdir)
+	if retval != -9001 {
+		args = append(args, retval)
+	}
+	rows, err := conn.Query(queryStmt, args...)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -154,7 +176,7 @@ func search(conn *sql.DB, q string, workdir string, beginTime time.Time, endTime
 	defer rows.Close()
 	for rows.Next() {
 		var entry HistoryEntry
-		err = rows.Scan(&entry.id, &entry.cmd, &entry.cwd, &entry.user, &entry.hostname)
+		err = rows.Scan(&entry.id, &entry.cmd, &entry.cwd, &entry.user, &entry.hostname, &entry.retval)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -173,12 +195,12 @@ func delete(conn *sql.DB, entryId uint32) {
 }
 
 func add(conn *sql.DB, entry HistoryEntry) {
-	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir, timestamp) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'))")
+	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir, timestamp, retval) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'),?)")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = stmt.Exec(entry.user, entry.cmd, entry.hostname, entry.cwd, entry.timestamp.Unix())
+	_, err = stmt.Exec(entry.user, entry.cmd, entry.hostname, entry.cwd, entry.timestamp.Unix(), entry.retval)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -258,7 +280,7 @@ func main() {
 		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
 		rs := rgx.FindStringSubmatch(historycmd)
 		if len(rs) == 2 {
-			add(conn, NewHistoryEntry(rs[1]))
+			add(conn, NewHistoryEntry(rs[1], ret))
 		}
 	case "search":
 		fallthrough
@@ -267,11 +289,12 @@ func main() {
 		var beginTime string
 		var endTime string
 		var distinct bool = true
-
+		var retVal int
 		searchCmd.StringVar(&workDir, "workdir", "%", "Search only within this workdir")
 		searchCmd.StringVar(&beginTime, "begin", "50 years ago", "Start searching from this timeframe")
 		searchCmd.StringVar(&endTime, "end", "now", "End searching from this timeframe")
 		searchCmd.BoolVar(&distinct, "distinct", true, "Remove consecutive duplicate commands from output")
+		searchCmd.IntVar(&retVal, "ret", -9001, "Only query commands that returned with this exit code. -9001=all (default)")
 
 		searchCmd.Parse(globalargs)
 
@@ -288,7 +311,7 @@ func main() {
 		}
 
 		q := strings.Join(args, " ")
-		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp)
+		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp, retVal)
 
 		previousCmd := ""
 		for e := results.Front(); e != nil; e = e.Next() {
