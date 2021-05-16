@@ -266,10 +266,12 @@ func main() {
 		var workDir string
 		var beginTime string
 		var endTime string
+		var distinct bool = true
 
 		searchCmd.StringVar(&workDir, "workdir", "%", "Search only within this workdir")
 		searchCmd.StringVar(&beginTime, "begin", "50 years ago", "Start searching from this timeframe")
 		searchCmd.StringVar(&endTime, "end", "now", "End searching from this timeframe")
+		searchCmd.BoolVar(&distinct, "distinct", true, "Remove consecutive duplicate commands from output")
 
 		searchCmd.Parse(globalargs)
 
@@ -288,13 +290,16 @@ func main() {
 		q := strings.Join(args, " ")
 		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp)
 
+		previousCmd := ""
 		for e := results.Front(); e != nil; e = e.Next() {
 			entry, ok := e.Value.(*HistoryEntry)
 			if !ok {
 				log.Panic("Failed to retrieve entries")
 			}
-
-			fmt.Printf("%s\n", entry.cmd)
+			if !distinct || previousCmd != entry.cmd {
+				fmt.Printf("%s\n", entry.cmd)
+			}
+			previousCmd = entry.cmd
 		}
 
 		if cmd == "delete" {
