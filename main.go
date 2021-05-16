@@ -27,6 +27,9 @@ type HistoryEntry struct {
 	timestamp time.Time
 }
 
+var GitTag string
+var GitCommit string
+
 func databaseLocation() string {
 	envOverride := os.Getenv("HS9001_DB_PATH")
 	if envOverride != "" {
@@ -354,6 +357,8 @@ func main() {
 		os.Exit(23)
 	case "import":
 		importFromStdin(conn)
+	case "version":
+		fmt.Fprintf(os.Stdout, "Git Tag: %s\nGit Commit: %s\n", GitTag, GitCommit)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown subcommand '%s' supplied\n\n", cmd)
 		printUsage()
