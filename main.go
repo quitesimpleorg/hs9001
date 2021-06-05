@@ -314,7 +314,11 @@ func main() {
 		}
 
 		q := strings.Join(args, " ")
-		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp, retVal)
+		cwdPath, err := filepath.Abs(workDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed parse working directory path: %s\n", err.Error())
+		}
+		results := search(conn, "%"+q+"%", cwdPath, beginTimestamp, endTimeStamp, retVal)
 
 		previousCmd := ""
 		for e := results.Front(); e != nil; e = e.Next() {
