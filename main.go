@@ -234,7 +234,7 @@ func exists(path string) (bool, error) {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/import/nolog>\n")
+	fmt.Fprintf(os.Stderr, "Usage:   ./hs9001 <add/search/import/nolog/bash-enable>\n")
 }
 
 func main() {
@@ -266,8 +266,14 @@ func main() {
 	migrateDatabase(conn, fetchDBVersion(conn))
 
 	switch cmd {
-	case "nolog":
-		fmt.Printf("Run this command to disable logging for the current shell:\n\tunset PROMPT_COMMAND\n")
+	case "bash-enable":
+		fmt.Printf(`
+			if [ -n "$PS1" ] ; then
+				PROMPT_COMMAND='hs9001 add -ret $? "$(history 1)"'
+			fi
+		`)
+	case "bash-disable":
+		fmt.Printf("unset PROMPT_COMMAND\n")
 	case "add":
 		var ret int
 		addCmd.IntVar(&ret, "ret", 0, "Return value of the command to add")

@@ -34,9 +34,7 @@ apk add hs9001
 Add this to .bashrc
 
 ```
-if [ -n "$PS1" ] ; then
-    PROMPT_COMMAND='hs9001 add -ret $? "$(history 1)"'
-fi
+eval "$(hs9001 bash-enable)"
 ```
 By default, every system user gets his own database. You can override this by setting the environment variable
 for all users that should write to your unified database.
