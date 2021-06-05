@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/peterh/liner"
 	"github.com/tj/go-naturaldate"
 	_ "modernc.org/sqlite"
 )
@@ -266,6 +267,34 @@ func main() {
 	migrateDatabase(conn, fetchDBVersion(conn))
 
 	switch cmd {
+	case "bash-ctrlr":
+		line := liner.NewLiner()
+		defer line.Close()
+		line.SetCtrlCAborts(true)
+		line.SetCompleter(func(line string) (c []string) {
+			beginTimestamp, err := naturaldate.Parse("50 years ago", time.Now())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+			}
+			endTimeStamp, err := naturaldate.Parse("now", time.Now())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+			}
+			results := search(conn, "%"+line+"%", "%", beginTimestamp, endTimeStamp, -9001)
+			for e := results.Front(); e != nil; e = e.Next() {
+				entry, ok := e.Value.(*HistoryEntry)
+				if !ok {
+					log.Panic("Failed to retrieve entries")
+				}
+				c = append(c, entry.cmd)
+			}
+			return
+		})
+
+		if name, err := line.Prompt("What is your command? "); err == nil {
+			log.Print("Got: ", name)
+		}
+
 	case "bash-enable":
 		fmt.Printf(`
 			if [ -n "$PS1" ] ; then
