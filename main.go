@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/peterh/liner"
+	"hs9001/liner"
+
 	"github.com/tj/go-naturaldate"
 	_ "modernc.org/sqlite"
 )
@@ -149,28 +151,47 @@ func importFromStdin(conn *sql.DB) {
 	}
 }
 
-func search(conn *sql.DB, q string, workdir string, beginTime time.Time, endTime time.Time, retval int) list.List {
+type searchopts struct {
+	command *string
+	workdir *string
+	after   *time.Time
+	before  *time.Time
+	retval  *int
+	order   string
+}
+
+func search(conn *sql.DB, opts searchopts) list.List {
+	args := make([]interface{}, 0)
 	var sb strings.Builder
 	sb.WriteString("SELECT id, command, workdir, user, hostname, retval ")
 	sb.WriteString("FROM history ")
-	sb.WriteString("WHERE timestamp BETWEEN datetime(?, 'unixepoch') ")
-	sb.WriteString("AND datetime(?, 'unixepoch') ")
-	sb.WriteString("AND command LIKE ? ")
-	sb.WriteString("AND workdir LIKE ? ")
-	if retval != -9001 {
-		sb.WriteString("AND retval = ? ")
+	sb.WriteString("WHERE 1=1 ") //1=1 so we can append as many AND foo as we want, or none
+
+	if opts.command != nil {
+		sb.WriteString("AND command LIKE ? ")
+		args = append(args, opts.command)
 	}
-	sb.WriteString("ORDER BY timestamp ASC ")
+	if opts.workdir != nil {
+		sb.WriteString("AND workdir LIKE ? ")
+		args = append(args, opts.workdir)
+	}
+	if opts.after != nil {
+		sb.WriteString("AND timestamp > datetime(?, 'unixepoch') ")
+		args = append(args, opts.after.Unix())
+	}
+	if opts.before != nil {
+		sb.WriteString("AND timestamp < datetime(?, 'unixepoch') ")
+		args = append(args, opts.before.Unix())
+	}
+	if opts.retval != nil {
+		sb.WriteString("AND retval = ? ")
+		args = append(args, opts.retval)
+	}
+	sb.WriteString("ORDER BY timestamp ")
+	sb.WriteString("ASC ")
 
 	queryStmt := sb.String()
-	args := make([]interface{}, 0)
-	args = append(args, beginTime.Unix())
-	args = append(args, endTime.Unix())
-	args = append(args, q)
-	args = append(args, workdir)
-	if retval != -9001 {
-		args = append(args, retval)
-	}
+
 	rows, err := conn.Query(queryStmt, args...)
 	if err != nil {
 		log.Panic(err)
@@ -271,34 +292,22 @@ func main() {
 		line := liner.NewLiner()
 		defer line.Close()
 		line.SetCtrlCAborts(true)
-		line.SetCompleter(func(line string) (c []string) {
-			beginTimestamp, err := naturaldate.Parse("50 years ago", time.Now())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
-			}
-			endTimeStamp, err := naturaldate.Parse("now", time.Now())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
-			}
-			results := search(conn, "%"+line+"%", "%", beginTimestamp, endTimeStamp, -9001)
-			for e := results.Front(); e != nil; e = e.Next() {
-				entry, ok := e.Value.(*HistoryEntry)
-				if !ok {
-					log.Panic("Failed to retrieve entries")
-				}
-				c = append(c, entry.cmd)
-			}
-			return
-		})
+		line.SetHistoryProvider(&history{conn: conn})
+		line.SetMultiLineMode(true)
 
-		if name, err := line.Prompt("What is your command? "); err == nil {
-			log.Print("Got: ", name)
+		rdlineline := os.Getenv("READLINE_LINE")
+		rdlinepos := os.Getenv("READLINE_POS")
+		rdlineposint, _ := strconv.Atoi(rdlinepos)
+
+		if name, err := line.PromptWithSuggestionReverse("", rdlineline, rdlineposint); err == nil {
+			fmt.Fprintf(os.Stderr, "%s\n", name)
 		}
 
 	case "bash-enable":
 		fmt.Printf(`
 			if [ -n "$PS1" ] ; then
 				PROMPT_COMMAND='hs9001 add -ret $? "$(history 1)"'
+				bind -x '"\C-r": " READLINE_LINE=$(hs9001 bash-ctrlr 3>&1 1>&2 2>&3) READLINE_POINT=0"'
 			fi
 		`)
 	case "bash-disable":
@@ -326,13 +335,13 @@ func main() {
 		fallthrough
 	case "delete":
 		var workDir string
-		var beginTime string
-		var endTime string
+		var afterTime string
+		var beforeTime string
 		var distinct bool = true
 		var retVal int
-		searchCmd.StringVar(&workDir, "cwd", "%", "Search only within this workdir")
-		searchCmd.StringVar(&beginTime, "begin", "50 years ago", "Start searching from this timeframe")
-		searchCmd.StringVar(&endTime, "end", "now", "End searching from this timeframe")
+		searchCmd.StringVar(&workDir, "cwd", "", "Search only within this workdir")
+		searchCmd.StringVar(&afterTime, "after", "", "Start searching from this timeframe")
+		searchCmd.StringVar(&beforeTime, "before", "", "End searching from this timeframe")
 		searchCmd.BoolVar(&distinct, "distinct", true, "Remove consecutive duplicate commands from output")
 		searchCmd.IntVar(&retVal, "ret", -9001, "Only query commands that returned with this exit code. -9001=all (default)")
 
@@ -340,25 +349,39 @@ func main() {
 
 		args := searchCmd.Args()
 
-		beginTimestamp, err := naturaldate.Parse(beginTime, time.Now())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
-		}
-
-		endTimeStamp, err := naturaldate.Parse(endTime, time.Now())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
-		}
-
 		q := strings.Join(args, " ")
-		if workDir != "%" {
-			workDir, err = filepath.Abs(workDir)
+
+		opts := searchopts{}
+		opts.order = "ASC"
+		if q != "" {
+			cmd := "%" + q + "%"
+			opts.command = &cmd
+		}
+		if workDir != "" {
+			wd, err := filepath.Abs(workDir)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed parse working directory path: %s\n", err.Error())
 			}
+			opts.workdir = &wd
 		}
-
-		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp, retVal)
+		if afterTime != "" {
+			afterTimestamp, err := naturaldate.Parse(afterTime, time.Now())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+			}
+			opts.after = &afterTimestamp
+		}
+		if beforeTime != "" {
+			beforeTimestamp, err := naturaldate.Parse(beforeTime, time.Now())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to convert time string: %s\n", err.Error())
+			}
+			opts.before = &beforeTimestamp
+		}
+		if retVal != -9001 {
+			opts.retval = &retVal
+		}
+		results := search(conn, opts)
 
 		previousCmd := ""
 		for e := results.Front(); e != nil; e = e.Next() {
