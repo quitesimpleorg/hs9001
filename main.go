@@ -293,7 +293,7 @@ func main() {
 		var endTime string
 		var distinct bool = true
 		var retVal int
-		searchCmd.StringVar(&workDir, "workdir", "%", "Search only within this workdir")
+		searchCmd.StringVar(&workDir, "cwd", "%", "Search only within this workdir")
 		searchCmd.StringVar(&beginTime, "begin", "50 years ago", "Start searching from this timeframe")
 		searchCmd.StringVar(&endTime, "end", "now", "End searching from this timeframe")
 		searchCmd.BoolVar(&distinct, "distinct", true, "Remove consecutive duplicate commands from output")
