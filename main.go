@@ -282,7 +282,7 @@ func main() {
 
 		}
 		historycmd := args[0]
-		var rgx = regexp.MustCompile("\\s+\\d+\\s+(.*)")
+		var rgx = regexp.MustCompile(`\s+\d+\s+(.*)`)
 		rs := rgx.FindStringSubmatch(historycmd)
 		if len(rs) == 2 {
 			add(conn, NewHistoryEntry(rs[1], ret))
@@ -316,11 +316,14 @@ func main() {
 		}
 
 		q := strings.Join(args, " ")
-		cwdPath, err := filepath.Abs(workDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed parse working directory path: %s\n", err.Error())
+		if workDir != "%" {
+			workDir, err = filepath.Abs(workDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed parse working directory path: %s\n", err.Error())
+			}
 		}
-		results := search(conn, "%"+q+"%", cwdPath, beginTimestamp, endTimeStamp, retVal)
+
+		results := search(conn, "%"+q+"%", workDir, beginTimestamp, endTimeStamp, retVal)
 
 		previousCmd := ""
 		for e := results.Front(); e != nil; e = e.Next() {
