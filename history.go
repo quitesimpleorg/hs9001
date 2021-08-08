@@ -12,6 +12,10 @@ type history struct {
 }
 
 func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
+	/* Hack for performance reasons */
+	if len(prefix) < 2 {
+		return
+	}
 	opts := searchopts{}
 	opts.order = "DESC"
 	cmdqry := prefix + "%"
@@ -27,6 +31,10 @@ func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
 	return
 }
 func (h *history) GetHistoryByPattern(pattern string) (ph []string, pos []int) {
+	/* Hack for performance reasons */
+	if len(pattern) < 2 {
+		return
+	}
 	opts := searchopts{}
 	opts.order = "DESC"
 	cmdqry := "%" + pattern + "%"
