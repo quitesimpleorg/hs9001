@@ -309,6 +309,7 @@ func main() {
 				PROMPT_COMMAND='hs9001 add -ret $? "$(history 1)"'
 				bind -x '"\C-r": " READLINE_LINE=$(hs9001 bash-ctrlr 3>&1 1>&2 2>&3) READLINE_POINT=0"'
 			fi
+			alias hs='hs9001 search'
 		`)
 	case "bash-disable":
 		fmt.Printf("unset PROMPT_COMMAND\n")
