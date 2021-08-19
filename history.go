@@ -12,16 +12,15 @@ type history struct {
 }
 
 func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
-	/* Hack for performance reasons */
-	if len(prefix) < 2 {
-		return
-	}
 	opts := searchopts{}
-	opts.order = "DESC"
+	o := "DESC"
+	opts.order = &o
+	lim := 100
+	opts.limit = &lim
 	cmdqry := prefix + "%"
 	opts.command = &cmdqry
 	results := search(h.conn, opts)
-	for e := results.Front(); e != nil; e = e.Next() {
+	for e := results.Back(); e != nil; e = e.Prev() {
 		entry, ok := e.Value.(*HistoryEntry)
 		if !ok {
 			log.Panic("Failed to retrieve entries")
@@ -31,16 +30,15 @@ func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
 	return
 }
 func (h *history) GetHistoryByPattern(pattern string) (ph []string, pos []int) {
-	/* Hack for performance reasons */
-	if len(pattern) < 2 {
-		return
-	}
 	opts := searchopts{}
-	opts.order = "DESC"
+	o := "DESC"
+	opts.order = &o
+	lim := 100
+	opts.limit = &lim
 	cmdqry := "%" + pattern + "%"
 	opts.command = &cmdqry
 	results := search(h.conn, opts)
-	for e := results.Front(); e != nil; e = e.Next() {
+	for e := results.Back(); e != nil; e = e.Prev() {
 		entry, ok := e.Value.(*HistoryEntry)
 		if !ok {
 			log.Panic("Failed to retrieve entries")

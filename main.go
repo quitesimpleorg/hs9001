@@ -157,7 +157,8 @@ type searchopts struct {
 	after   *time.Time
 	before  *time.Time
 	retval  *int
-	order   string
+	order   *string
+	limit   *int
 }
 
 func search(conn *sql.DB, opts searchopts) list.List {
@@ -188,7 +189,18 @@ func search(conn *sql.DB, opts searchopts) list.List {
 		args = append(args, opts.retval)
 	}
 	sb.WriteString("ORDER BY timestamp ")
-	sb.WriteString("ASC ")
+	if opts.order != nil {
+		sb.WriteString(*opts.order)
+		sb.WriteRune(' ')
+	} else {
+		sb.WriteString("ASC ")
+	}
+
+	if opts.limit != nil {
+		sb.WriteString("LIMIT ")
+		sb.WriteString(strconv.Itoa(*opts.limit))
+		sb.WriteRune(' ')
+	}
 
 	queryStmt := sb.String()
 
@@ -353,7 +365,8 @@ func main() {
 		q := strings.Join(args, " ")
 
 		opts := searchopts{}
-		opts.order = "ASC"
+		o := "ASC"
+		opts.order = &o
 		if q != "" {
 			cmd := "%" + q + "%"
 			opts.command = &cmd
