@@ -20,12 +20,13 @@ hs -cwd .
 Lists all commands ever entered in this directory
 
 ```
-hs -after yesterday -cwd . git
+hs -today -cwd . git
 ``` 
 Lists all git commands in the current directory which have been entered today.
 
-Also, it (by default) replaces bash's built-in CTRL-R mechanism, so hs9001's database will be used instead
-of bash's limited history files. 
+Also, it (by default) replaces bash's built-in CTRL-R mechanism, so hs9001's database will be used instead of bash's limited history files.
+
+When in reverse-search mode, you can only search the history of the current directory by pressing CTRL+A and then "w".
 
 ## Install
 
@@ -51,9 +52,6 @@ apk add hs9001
 go build
 #move hs9001 to a PATH location
 ```
-
-## Setup / Config
-
 Add this to .bashrc
 
 ```
@@ -62,8 +60,7 @@ eval "$(hs9001 bash-enable)"
 
 This will also create a `hs`alias so you have to type less in everyday usage.
 
-By default, every system user gets his own database. You can override this by setting the environment variable
-for all users that should write to your unified database.
+By default, every system user gets his own database. You can override this by setting the environment variable for all users that should write to your unified database.
 ```
 export HS9001_DB_PATH="/home/db/history.sqlite"
 ```
