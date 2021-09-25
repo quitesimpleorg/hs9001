@@ -37,8 +37,8 @@ type HistoryProvider interface {
 	WriteHistory(w io.Writer) (num int, err error)
 	AppendHistory(item string)
 	ClearHistory()
-	GetHistoryByPrefix(prefix string) (ph []string)
-	GetHistoryByPattern(pattern string) (ph []string, pos []int)
+	GetHistoryByPrefix(prefix string, mode int) (ph []string)
+	GetHistoryByPattern(pattern string, mode int) (ph []string, pos []int)
 	RLock()
 	RUnlock()
 }
@@ -95,11 +95,11 @@ func (s *State) AppendHistory(item string) {
 func (s *State) ClearHistory() {
 	s.historyProvider.ClearHistory()
 }
-func (s *State) getHistoryByPrefix(prefix string) (ph []string) {
-	return s.historyProvider.GetHistoryByPrefix(prefix)
+func (s *State) getHistoryByPrefix(prefix string, mode int) (ph []string) {
+	return s.historyProvider.GetHistoryByPrefix(prefix, mode)
 }
-func (s *State) getHistoryByPattern(pattern string) (ph []string, pos []int) {
-	return s.historyProvider.GetHistoryByPattern(pattern)
+func (s *State) getHistoryByPattern(pattern string, mode int) (ph []string, pos []int) {
+	return s.historyProvider.GetHistoryByPattern(pattern, mode)
 }
 
 // SetHistoryProvider allows you to set a custom provider

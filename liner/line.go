@@ -90,6 +90,11 @@ const (
 	tabReverse
 )
 
+const (
+	ModeGlobal = iota
+	ModeWorkdir
+)
+
 func (s *State) refresh(prompt []rune, buf []rune, pos int) error {
 	if s.columns == 0 {
 		return ErrInternal
@@ -411,8 +416,26 @@ func (s *State) tabComplete(p []rune, line []rune, pos int) ([]rune, int, interf
 
 // reverse intelligent search, implements a bash-like history search.
 func (s *State) reverseISearch(origLine []rune, origPos int) ([]rune, int, interface{}, error) {
-	p := "(reverse-i-search)`': "
-	err := s.refresh([]rune(p), origLine, origPos)
+	modeSelect := false
+	currentMode := ModeGlobal
+
+	getPrompt := func(arg string) string {
+		prompt := ""
+		switch currentMode {
+		case ModeWorkdir:
+			prompt = "(reverse:cwd)`%s': "
+		case ModeGlobal:
+			prompt = "(reverse:global)`%s': "
+		default:
+			panic("Invalid mode")
+		}
+		if modeSelect {
+			prompt = "(select mode)`%s': "
+		}
+		return fmt.Sprintf(prompt, arg)
+	}
+
+	err := s.refresh([]rune(getPrompt("")), origLine, origPos)
 	if err != nil {
 		return origLine, origPos, rune(esc), err
 	}
@@ -426,11 +449,10 @@ func (s *State) reverseISearch(origLine []rune, origPos int) ([]rune, int, inter
 
 	getLine := func() ([]rune, []rune, int) {
 		search := string(line)
-		prompt := "(reverse-i-search)`%s': "
-		return []rune(fmt.Sprintf(prompt, search)), []rune(foundLine), foundPos
+		return []rune(getPrompt(search)), []rune(foundLine), foundPos
 	}
 
-	history, positions := s.getHistoryByPattern(string(line))
+	history, positions := s.getHistoryByPattern(string(line), currentMode)
 	historyPos := len(history) - 1
 
 	for {
@@ -450,6 +472,8 @@ func (s *State) reverseISearch(origLine []rune, origPos int) ([]rune, int, inter
 				} else {
 					s.doBeep()
 				}
+			case ctrlA:
+				modeSelect = true
 			case ctrlS: // Search forward
 				if historyPos < len(history)-1 && historyPos >= 0 {
 					historyPos++
@@ -467,7 +491,7 @@ func (s *State) reverseISearch(origLine []rune, origPos int) ([]rune, int, inter
 					pos -= n
 
 					// For each char deleted, display the last matching line of history
-					history, positions := s.getHistoryByPattern(string(line))
+					history, positions := s.getHistoryByPattern(string(line), currentMode)
 					historyPos = len(history) - 1
 					if len(history) > 0 {
 						foundLine = history[historyPos]
@@ -480,17 +504,28 @@ func (s *State) reverseISearch(origLine []rune, origPos int) ([]rune, int, inter
 			case ctrlG: // Cancel
 				return origLine, origPos, rune(esc), err
 
-			case tab, cr, lf, ctrlA, ctrlB, ctrlD, ctrlE, ctrlF, ctrlK,
+			case tab, cr, lf, ctrlB, ctrlD, ctrlE, ctrlF, ctrlK,
 				ctrlL, ctrlN, ctrlO, ctrlP, ctrlQ, ctrlT, ctrlU, ctrlV, ctrlW, ctrlX, ctrlY, ctrlZ:
 				fallthrough
 			case 0, ctrlC, esc, 28, 29, 30, 31:
 				return []rune(foundLine), foundPos, next, err
 			default:
+				if modeSelect {
+					switch v {
+					case 'g':
+						currentMode = ModeGlobal
+					case 'w':
+						currentMode = ModeWorkdir
+					}
+					modeSelect = false
+					break
+				}
+
 				line = append(line[:pos], append([]rune{v}, line[pos:]...)...)
 				pos++
 
 				// For each keystroke typed, display the last matching line of history
-				history, positions = s.getHistoryByPattern(string(line))
+				history, positions = s.getHistoryByPattern(string(line), currentMode)
 				historyPos = len(history) - 1
 				if len(history) > 0 {
 					foundLine = history[historyPos]
@@ -726,7 +761,7 @@ mainLoop:
 			case ctrlP: // up
 				historyAction = true
 				if historyStale {
-					historyPrefix = s.getHistoryByPrefix(string(line))
+					historyPrefix = s.getHistoryByPrefix(string(line), ModeGlobal)
 					historyPos = len(historyPrefix)
 					historyStale = false
 				}
@@ -744,7 +779,7 @@ mainLoop:
 			case ctrlN: // down
 				historyAction = true
 				if historyStale {
-					historyPrefix = s.getHistoryByPrefix(string(line))
+					historyPrefix = s.getHistoryByPrefix(string(line), ModeGlobal)
 					historyPos = len(historyPrefix)
 					historyStale = false
 				}
@@ -912,7 +947,7 @@ mainLoop:
 			case up:
 				historyAction = true
 				if historyStale {
-					historyPrefix = s.getHistoryByPrefix(string(line))
+					historyPrefix = s.getHistoryByPrefix(string(line), ModeGlobal)
 					historyPos = len(historyPrefix)
 					historyStale = false
 				}
@@ -929,7 +964,7 @@ mainLoop:
 			case down:
 				historyAction = true
 				if historyStale {
-					historyPrefix = s.getHistoryByPrefix(string(line))
+					historyPrefix = s.getHistoryByPrefix(string(line), ModeGlobal)
 					historyPos = len(historyPrefix)
 					historyStale = false
 				}

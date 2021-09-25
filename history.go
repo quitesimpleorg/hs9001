@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"hs9001/liner"
 	"io"
 	"log"
+	"path/filepath"
 	"strings"
 )
 
@@ -11,14 +13,32 @@ type history struct {
 	conn *sql.DB
 }
 
-func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
+func createSearchOpts(query string, mode int) searchopts {
 	opts := searchopts{}
 	o := "DESC"
 	opts.order = &o
 	lim := 100
 	opts.limit = &lim
-	cmdqry := prefix + "%"
-	opts.command = &cmdqry
+	opts.command = &query
+
+	switch mode {
+	case liner.ModeGlobal:
+		break
+	case liner.ModeWorkdir:
+		workdir, err := filepath.Abs(".")
+		if err != nil {
+			panic(err)
+		}
+		opts.workdir = &workdir
+	default:
+		panic("Invalid mode supplied")
+	}
+	return opts
+}
+
+func (h *history) GetHistoryByPrefix(prefix string, mode int) (ph []string) {
+	cmdquery := prefix + "%"
+	opts := createSearchOpts(cmdquery, mode)
 	results := search(h.conn, opts)
 	for e := results.Back(); e != nil; e = e.Prev() {
 		entry, ok := e.Value.(*HistoryEntry)
@@ -29,14 +49,11 @@ func (h *history) GetHistoryByPrefix(prefix string) (ph []string) {
 	}
 	return
 }
-func (h *history) GetHistoryByPattern(pattern string) (ph []string, pos []int) {
-	opts := searchopts{}
-	o := "DESC"
-	opts.order = &o
-	lim := 100
-	opts.limit = &lim
-	cmdqry := "%" + pattern + "%"
-	opts.command = &cmdqry
+
+func (h *history) GetHistoryByPattern(pattern string, mode int) (ph []string, pos []int) {
+	cmdquery := "%" + pattern + "%"
+	opts := createSearchOpts(cmdquery, mode)
+
 	results := search(h.conn, opts)
 	for e := results.Back(); e != nil; e = e.Prev() {
 		entry, ok := e.Value.(*HistoryEntry)
