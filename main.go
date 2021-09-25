@@ -398,13 +398,31 @@ func main() {
 		results := search(conn, opts)
 
 		previousCmd := ""
+
+		fi, err := os.Stdout.Stat()
+		if err != nil {
+			panic(err)
+		}
+
+		//Don't print colors if output is piped
+		printColors := true
+		if (fi.Mode() & os.ModeCharDevice) == 0 {
+			printColors = false
+		}
+
 		for e := results.Front(); e != nil; e = e.Next() {
 			entry, ok := e.Value.(*HistoryEntry)
 			if !ok {
 				log.Panic("Failed to retrieve entries")
 			}
 			if !distinct || previousCmd != entry.cmd {
-				fmt.Printf("%s\n", entry.cmd)
+				prefix := ""
+				postfix := ""
+				if printColors && entry.retval != 0 {
+					prefix = "\033[38;5;88m"
+					postfix = "\033[0m"
+				}
+				fmt.Printf("%s%s%s\n", prefix, entry.cmd, postfix)
 			}
 			previousCmd = entry.cmd
 		}
