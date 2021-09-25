@@ -164,7 +164,7 @@ type searchopts struct {
 func search(conn *sql.DB, opts searchopts) list.List {
 	args := make([]interface{}, 0)
 	var sb strings.Builder
-	sb.WriteString("SELECT id, command, workdir, user, hostname, retval ")
+	sb.WriteString("SELECT id, command, workdir, user, hostname, retval, strftime(\"%s\", timestamp) ")
 	sb.WriteString("FROM history ")
 	sb.WriteString("WHERE 1=1 ") //1=1 so we can append as many AND foo as we want, or none
 
@@ -213,10 +213,12 @@ func search(conn *sql.DB, opts searchopts) list.List {
 	defer rows.Close()
 	for rows.Next() {
 		var entry HistoryEntry
-		err = rows.Scan(&entry.id, &entry.cmd, &entry.cwd, &entry.user, &entry.hostname, &entry.retval)
+		var timestamp int64
+		err = rows.Scan(&entry.id, &entry.cmd, &entry.cwd, &entry.user, &entry.hostname, &entry.retval, &timestamp)
 		if err != nil {
 			log.Panic(err)
 		}
+		entry.timestamp = time.Unix(timestamp, 0)
 		result.PushBack(&entry)
 	}
 	return result
@@ -351,13 +353,14 @@ func main() {
 		var afterTime string
 		var beforeTime string
 		var distinct bool = true
+		var today bool = false
 		var retVal int
 		searchCmd.StringVar(&workDir, "cwd", "", "Search only within this workdir")
 		searchCmd.StringVar(&afterTime, "after", "", "Start searching from this timeframe")
 		searchCmd.StringVar(&beforeTime, "before", "", "End searching from this timeframe")
 		searchCmd.BoolVar(&distinct, "distinct", true, "Remove consecutive duplicate commands from output")
+		searchCmd.BoolVar(&today, "today", false, "Search only today's entries. Overrides --after")
 		searchCmd.IntVar(&retVal, "ret", -9001, "Only query commands that returned with this exit code. -9001=all (default)")
-
 		searchCmd.Parse(globalargs)
 
 		args := searchCmd.Args()
@@ -378,6 +381,11 @@ func main() {
 			}
 			opts.workdir = &wd
 		}
+
+		if today {
+			afterTime = "today"
+		}
+
 		if afterTime != "" {
 			afterTimestamp, err := naturaldate.Parse(afterTime, time.Now())
 			if err != nil {
