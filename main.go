@@ -66,6 +66,11 @@ func migrateDatabase(conn *sql.DB, currentVersion int) {
 	migrations := []string{
 		"ALTER TABLE history ADD COLUMN workdir varchar(4096) DEFAULT ''",
 		"ALTER TABLE history ADD COLUMN retval integer DEFAULT -9001",
+		"ALTER TABLE history ADD COLUMN unix_tmp integer",
+		"UPDATE history SET unix_tmp = strftime('%s', timestamp)",
+		"DROP VIEW count_by_date",
+		"ALTER TABLE history DROP COLUMN timestamp",
+		"ALTER TABLE history RENAME COLUMN unix_tmp TO timestamp",
 	}
 
 	if !(len(migrations) > currentVersion) {
@@ -164,7 +169,7 @@ type searchopts struct {
 func search(conn *sql.DB, opts searchopts) list.List {
 	args := make([]interface{}, 0)
 	var sb strings.Builder
-	sb.WriteString("SELECT id, command, workdir, user, hostname, retval, strftime(\"%s\", timestamp) ")
+	sb.WriteString("SELECT id, command, workdir, user, hostname, retval, timestamp ")
 	sb.WriteString("FROM history ")
 	sb.WriteString("WHERE 1=1 ") //1=1 so we can append as many AND foo as we want, or none
 
@@ -177,11 +182,11 @@ func search(conn *sql.DB, opts searchopts) list.List {
 		args = append(args, opts.workdir)
 	}
 	if opts.after != nil {
-		sb.WriteString("AND timestamp > datetime(?, 'unixepoch') ")
+		sb.WriteString("AND timestamp > ? ")
 		args = append(args, opts.after.Unix())
 	}
 	if opts.before != nil {
-		sb.WriteString("AND timestamp < datetime(?, 'unixepoch') ")
+		sb.WriteString("AND timestamp < ? ")
 		args = append(args, opts.before.Unix())
 	}
 	if opts.retval != nil {
@@ -234,7 +239,7 @@ func delete(conn *sql.DB, entryId uint32) {
 }
 
 func add(conn *sql.DB, entry HistoryEntry) {
-	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir, timestamp, retval) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'),?)")
+	stmt, err := conn.Prepare("INSERT INTO history (user, command, hostname, workdir, timestamp, retval) VALUES (?, ?, ?, ?, ?,?)")
 	if err != nil {
 		log.Panic(err)
 	}
