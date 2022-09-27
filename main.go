@@ -411,6 +411,7 @@ func main() {
 		results := search(conn, opts)
 
 		previousCmd := ""
+		previousReturn := -1
 
 		fi, err := os.Stdout.Stat()
 		if err != nil {
@@ -428,7 +429,7 @@ func main() {
 			if !ok {
 				log.Panic("Failed to retrieve entries")
 			}
-			if !distinct || previousCmd != entry.cmd {
+			if !distinct || !(previousCmd == entry.cmd && previousReturn == entry.retval)  {
 				prefix := ""
 				postfix := ""
 				if printColors && entry.retval != 0 {
@@ -438,6 +439,7 @@ func main() {
 				fmt.Printf("%s%s%s\n", prefix, entry.cmd, postfix)
 			}
 			previousCmd = entry.cmd
+			previousReturn = entry.retval
 		}
 
 		if cmd == "delete" {
